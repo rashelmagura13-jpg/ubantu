@@ -1,53 +1,291 @@
-name: Ubuntu Desktop RDP (30GB+ Storage)
+name: Ubuntu Desktop RDP + Chrome + Python
 
 on:
   workflow_dispatch:
 
+env:
+  USERNAME: ubuntuuser
+  PASSWORD: 123456
+  DISPLAY: :10
+  DEBIAN_FRONTEND: noninteractive
+
 jobs:
   build:
     runs-on: ubuntu-22.04
+    timeout-minutes: 360
+
     steps:
-      - name: Free Up Disk Space
+
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Free Disk Space
         run: |
-          echo "🧹 Cleaning up pre-installed heavy software..."
           sudo rm -rf /usr/share/dotnet
           sudo rm -rf /usr/local/lib/android
           sudo rm -rf /opt/ghc
-          sudo rm -rf "/usr/local/share/boost"
-          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+          sudo rm -rf /usr/local/share/boost
           sudo apt-get clean
+          sudo docker system prune -af || true
 
-      - name: Install LXDE Desktop & XRDP (Bulletproof Version)
+      - name: Update Ubuntu
         run: |
           sudo apt-get update
-          # XFCE এর বদলে LXDE ইন্সটল করা হচ্ছে
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y lxde xrdp dbus-x11 x11-xserver-utils
-          sudo adduser xrdp ssl-cert
+          sudo apt-get upgrade -y
+
+      - name: Install Desktop Environment
+        run: |
+          sudo apt-get install -y \
+          lxde \
+          xrdp \
+          dbus-x11 \
+          x11-xserver-utils \
+          xvfb \
+          wget \
+          curl \
+          unzip \
+          git \
+          software-properties-common \
+          apt-transport-https \
+          ca-certificates
+
+      - name: Install Python
+        run: |
+          sudo apt-get install -y \
+          python3 \
+          python3-pip \
+          python3-venv \
+          python3-dev
+
+      - name: Install Chrome Dependencies
+        run: |
+          sudo apt-get install -y \
+          libgtk-3-0 \
+          libgbm1 \
+          libasound2 \
+          libatk1.0-0 \
+          libatk-bridge2.0-0 \
+          libcups2 \
+          libdrm2 \
+          libxkbcommon0 \
+          libxcomposite1 \
+          libxdamage1 \
+          libxfixes3 \
+          libxrandr2 \
+          libxshmfence1 \
+          libx11-xcb1 \
+          libxcb1 \
+          libnss3 \
+          libnspr4 \
+          libxss1 \
+          fonts-liberation
+
+      - name: Install Google Chrome
+        run: |
+          wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+          sudo apt install -y ./google-chrome-stable_current_amd64.deb || sudo apt --fix-broken install -y
+
+      - name: Verify Chrome
+        run: |
+          which google-chrome
+          google-chrome --version
+      - name: Create Ubuntu User
+        run: |
+          sudo useradd -m -s /bin/bash $USERNAME || true
+          echo "$USERNAME:$PASSWORD" | sudo chpasswd
+          sudo usermod -aG sudo $USERNAME
+          echo "startlxde" | sudo tee /home/$USERNAME/.xsession
+          sudo chown $USERNAME:$USERNAME /home/$USERNAME/.xsession
+
+      - name: Configure XRDP
+        run: |
+          sudo adduser xrdp ssl-cert || true
           sudo systemctl enable xrdp
           sudo systemctl restart xrdp
 
-      - name: Create Ubuntu User
+      - name: Setup Xvfb
         run: |
-          sudo useradd -m -s /bin/bash ubuntuuser
-          sudo adduser ubuntuuser sudo
-          echo 'ubuntuuser:123456' | sudo chpasswd
-          sudo sed -i 's/allowed_users=console/allowed_users=anybody/' /etc/X11/Xwrapper.config
-          # LXDE-কে ডিফল্ট ডেস্কটপ হিসেবে সেট করা
-          echo "startlxde" | sudo tee /home/ubuntuuser/.xsession > /dev/null
-          sudo chown ubuntuuser:ubuntuuser /home/ubuntuuser/.xsession
-
-      - name: Start Free Tunnel (No Account/Card Needed)
-        run: |
-          wget https://github.com/ekzhang/bore/releases/download/v0.5.1/bore-v0.5.1-x86_64-unknown-linux-musl.tar.gz
-          tar -xf bore-v0.5.1-x86_64-unknown-linux-musl.tar.gz
-          nohup ./bore local 3389 --to bore.pub > bore.log 2>&1 &
+          sudo pkill Xvfb || true
+          nohup Xvfb :10 -screen 0 1920x1080x24 >/dev/null 2>&1 &
           sleep 5
-          echo "========================================="
-          echo "🌐 RDP Address:"
-          cat bore.log | grep -Eo "bore.pub:[0-9]+"
-          echo "👤 Username: ubuntuuser"
-          echo "🔑 Password: 123456"
-          echo "========================================="
+          echo "DISPLAY=:10" >> $GITHUB_ENV
 
-      - name: Keep Server Running
-        run: sleep 21600
+      - name: Create Runtime Directory
+        run: |
+          sudo mkdir -p /tmp/runtime-$USERNAME
+          sudo chmod 700 /tmp/runtime-$USERNAME
+          echo "XDG_RUNTIME_DIR=/tmp/runtime-$USERNAME" >> $GITHUB_ENV
+
+      - name: Create Python Virtual Environment
+        run: |
+          python3 -m venv .venv
+          source .venv/bin/activate
+          python -m pip install --upgrade pip setuptools wheel
+
+      - name: Install Python Packages
+        run: |
+          source .venv/bin/activate
+
+          pip install \
+            playwright \
+            selenium \
+            webdriver-manager \
+            undetected-chromedriver \
+            pyTelegramBotAPI \
+            python-dotenv \
+            requests \
+            psutil \
+            flask \
+            aiohttp \
+            pillow \
+            schedule \
+            colorama
+
+      - name: Install Playwright Browsers
+        run: |
+          source .venv/bin/activate
+          python -m playwright install chromium
+          python -m playwright install-deps
+
+      - name: Clean Chrome Profile
+        run: |
+          rm -rf ~/.config/google-chrome || true
+          rm -rf ~/.cache/google-chrome || true
+          rm -rf /tmp/chrome-profile || true
+          mkdir -p /tmp/chrome-profile
+      - name: Configure Chrome Environment
+        run: |
+          mkdir -p /home/$USERNAME/.config
+          mkdir -p /home/$USERNAME/.cache
+          mkdir -p /tmp/chrome-profile
+
+          echo "DISPLAY=:10" >> $GITHUB_ENV
+          echo "XDG_RUNTIME_DIR=/tmp/runtime-$USERNAME" >> $GITHUB_ENV
+          echo "CHROME_BIN=/usr/bin/google-chrome" >> $GITHUB_ENV
+          echo "CHROMEDRIVER_PATH=/usr/bin/chromedriver" >> $GITHUB_ENV
+
+      - name: Install Bore Tunnel
+        run: |
+          wget -q https://github.com/ekzhang/bore/releases/download/v0.5.1/bore-v0.5.1-x86_64-unknown-linux-musl.tar.gz
+          tar -xf bore-v0.5.1-x86_64-unknown-linux-musl.tar.gz
+
+      - name: Start Bore
+        run: |
+          nohup ./bore local 3389 --to bore.pub > bore.log 2>&1 &
+          sleep 8
+
+      - name: Show RDP Information
+        run: |
+          echo "=========================================="
+          echo "RDP ADDRESS:"
+          cat bore.log | grep -Eo "bore.pub:[0-9]+"
+          echo ""
+          echo "USERNAME : $USERNAME"
+          echo "PASSWORD : $PASSWORD"
+          echo "DISPLAY  : :10"
+          echo "=========================================="
+
+      - name: Verify Python
+        run: |
+          source .venv/bin/activate
+          python --version
+          pip list
+
+      - name: Verify Playwright
+        run: |
+          source .venv/bin/activate
+          python -m playwright --version || true
+
+      - name: Verify Chrome
+        run: |
+          google-chrome --version
+          which google-chrome
+
+      - name: Verify Display
+        run: |
+          echo $DISPLAY
+          xdpyinfo | head -20 || true
+
+      - name: Fix Permissions
+        run: |
+          sudo chown -R $USERNAME:$USERNAME $GITHUB_WORKSPACE
+          sudo chmod -R 755 $GITHUB_WORKSPACE
+
+      - name: Prepare Project
+        run: |
+          source .venv/bin/activate
+
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          fi
+
+          if [ -f config.env ]; then
+            echo "config.env detected"
+          fi
+
+          ls -la
+      - name: Start D-Bus
+        run: |
+          export DISPLAY=:10
+          export XDG_RUNTIME_DIR=/tmp/runtime-$USERNAME
+
+          sudo mkdir -p /run/dbus
+          sudo dbus-daemon --system --fork || true
+
+      - name: Test Chrome CDP
+        run: |
+          export DISPLAY=:10
+          export XDG_RUNTIME_DIR=/tmp/runtime-$USERNAME
+
+          pkill chrome || true
+          pkill google-chrome || true
+
+          google-chrome \
+            --no-sandbox \
+            --disable-dev-shm-usage \
+            --disable-gpu \
+            --disable-background-networking \
+            --disable-sync \
+            --disable-default-apps \
+            --disable-extensions \
+            --remote-debugging-port=9222 \
+            --user-data-dir=/tmp/chrome-profile \
+            about:blank >/tmp/chrome.log 2>&1 &
+
+          sleep 10
+
+          curl http://127.0.0.1:9222/json/version || true
+
+      - name: Start Project
+        shell: bash
+        run: |
+          source .venv/bin/activate
+
+          if [ -f system_ctl.py ]; then
+            python system_ctl.py start
+          elif [ -f service_watchdog.py ]; then
+            nohup python service_watchdog.py >/tmp/watchdog.log 2>&1 &
+          elif [ -f main.py ]; then
+            nohup python main.py >/tmp/main.log 2>&1 &
+          elif [ -f ivasms.py ]; then
+            nohup python ivasms.py >/tmp/ivasms.log 2>&1 &
+          fi
+
+      - name: Process List
+        run: |
+          ps -ef | grep python || true
+          ps -ef | grep chrome || true
+
+      - name: Chrome Log
+        run: |
+          cat /tmp/chrome.log || true
+
+      - name: Keep Runner Alive
+        run: |
+          while true
+          do
+            echo "======== $(date) ========"
+            ps -ef | grep python || true
+            ps -ef | grep chrome || true
+            sleep 300
+          done
