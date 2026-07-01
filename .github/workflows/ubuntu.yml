@@ -7,7 +7,7 @@ jobs:
   build:
     runs-on: ubuntu-22.04
     steps:
-      - name: Free Up Disk Space (To get 30GB+ Storage)
+      - name: Free Up Disk Space
         run: |
           echo "🧹 Cleaning up pre-installed heavy software..."
           sudo rm -rf /usr/share/dotnet
@@ -16,27 +16,13 @@ jobs:
           sudo rm -rf "/usr/local/share/boost"
           sudo rm -rf "$AGENT_TOOLSDIRECTORY"
           sudo apt-get clean
-          df -h /
 
-      - name: Update System & Install Desktop Environment
+      - name: Install LXDE Desktop & XRDP (Bulletproof Version)
         run: |
           sudo apt-get update
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y xfce4 xfce4-goodies xorg dbus-x11 x11-xserver-utils xrdp
+          # XFCE এর বদলে LXDE ইন্সটল করা হচ্ছে
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y lxde xrdp dbus-x11 x11-xserver-utils
           sudo adduser xrdp ssl-cert
-          
-          # একদম সঠিক সমাধান: XRDP স্টার্টআপ স্ক্রিপ্ট ফিক্স করা
-          sudo bash -c 'cat > /etc/xrdp/startwm.sh <<EOF
-          #!/bin/sh
-          if [ -r /etc/default/locale ]; then
-            . /etc/default/locale
-            export LANG LANGUAGE
-          fi
-          unset DBUS_SESSION_BUS_ADDRESS
-          unset XDG_RUNTIME_DIR
-          exec startxfce4
-          EOF'
-          sudo chmod +x /etc/xrdp/startwm.sh
-          
           sudo systemctl enable xrdp
           sudo systemctl restart xrdp
 
@@ -46,6 +32,9 @@ jobs:
           sudo adduser ubuntuuser sudo
           echo 'ubuntuuser:123456' | sudo chpasswd
           sudo sed -i 's/allowed_users=console/allowed_users=anybody/' /etc/X11/Xwrapper.config
+          # LXDE-কে ডিফল্ট ডেস্কটপ হিসেবে সেট করা
+          echo "startlxde" | sudo tee /home/ubuntuuser/.xsession > /dev/null
+          sudo chown ubuntuuser:ubuntuuser /home/ubuntuuser/.xsession
 
       - name: Start Free Tunnel (No Account/Card Needed)
         run: |
