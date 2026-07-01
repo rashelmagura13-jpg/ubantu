@@ -45,8 +45,8 @@ jobs:
           echo "========================================="
           echo "🌐 RDP Address:"
           cat bore.log | grep -Eo "bore.pub:[0-9]+"
-          echo "👤 Username: Rashel"
-          echo "🔑 Password: Rashel"
+          echo "👤 Username: ubuntuuser"
+          echo "🔑 Password: 123456"
           echo "========================================="
 
       - name: Keep Server Running
