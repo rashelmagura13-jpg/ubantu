@@ -1,0 +1,59 @@
+name: Ubuntu Desktop RDP (30GB+ Storage)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Free Up Disk Space (To get 30GB+ Storage)
+        run: |
+          echo "🧹 Cleaning up pre-installed heavy software to free up space..."
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf "/usr/local/share/boost"
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+          sudo apt-get clean
+          echo "✅ Disk cleanup complete! Current free space:"
+          df -h /
+
+      - name: Update System & Install Desktop Environment (XFCE4)
+        run: |
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y xfce4 xfce4-terminal dbus-x11
+          sudo apt-get install -y xrdp
+          sudo adduser xrdp ssl-cert
+          sudo systemctl enable xrdp
+          sudo systemctl start xrdp
+
+      - name: Create Ubuntu User
+        run: |
+          sudo useradd -m ubuntuuser
+          sudo adduser ubuntuuser sudo
+          echo 'ubuntuuser:123456' | sudo chpasswd
+          sudo sed -i 's/allowed_users=console/allowed_users=anybody/' /etc/X11/Xwrapper.config
+          echo "xfce4-session" > /home/ubuntuuser/.xsession
+          sudo chown ubuntuuser:ubuntuuser /home/ubuntuuser/.xsession
+
+      - name: Download & Authenticate Ngrok
+        run: |
+          wget https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-linux-amd64.tgz
+          tar -xf ngrok-v3-stable-linux-amd64.tgz
+          sudo mv ngrok /usr/local/bin/
+          ngrok config add-authtoken ${{ secrets.NGROK_AUTH_TOKEN }}
+
+      - name: Start Ngrok Tunnel & Get IP
+        run: |
+          ngrok tcp 3389 &
+          sleep 5
+          echo "========================================="
+          echo "🌐 RDP Address:"
+          curl -s http://localhost:4040/api/tunnels | grep -Eo "tcp://[a-zA-Z0-9.-]+:[0-9]+" | sed 's/tcp:\/\///'
+          echo "👤 Username: ubuntuuser"
+          echo "🔑 Password: 123456"
+          echo "========================================="
+
+      - name: Keep Server Running
+        run: sleep 21600
