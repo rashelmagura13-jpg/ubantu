@@ -22,8 +22,7 @@ jobs:
       - name: Update System & Install Desktop Environment (XFCE4)
         run: |
           sudo apt-get update
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y xfce4 xfce4-terminal dbus-x11
-          sudo apt-get install -y xrdp
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y xfce4 xfce4-goodies xorg dbus-x11 x11-xserver-utils xrdp
           sudo adduser xrdp ssl-cert
           sudo systemctl enable xrdp
           sudo systemctl start xrdp
@@ -34,7 +33,7 @@ jobs:
           sudo adduser ubuntuuser sudo
           echo 'ubuntuuser:123456' | sudo chpasswd
           sudo sed -i 's/allowed_users=console/allowed_users=anybody/' /etc/X11/Xwrapper.config
-          echo "xfce4-session" | sudo tee /home/ubuntuuser/.xsession > /dev/null
+          echo "startxfce4" | sudo tee /home/ubuntuuser/.xsession > /dev/null
           sudo chown ubuntuuser:ubuntuuser /home/ubuntuuser/.xsession
 
       - name: Start Free Tunnel (No Account/Card Needed)
@@ -46,8 +45,8 @@ jobs:
           echo "========================================="
           echo "🌐 RDP Address:"
           cat bore.log | grep -Eo "bore.pub:[0-9]+"
-          echo "👤 Username: ubuntuuser"
-          echo "🔑 Password: 123456"
+          echo "👤 Username: Rashel"
+          echo "🔑 Password: Rashel"
           echo "========================================="
 
       - name: Keep Server Running
